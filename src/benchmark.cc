@@ -57,9 +57,9 @@ DEFINE_bool(benchmark_list_tests, false,
 
 DEFINE_string(benchmark_filter, ".",
               "A regular expression that specifies the set of benchmarks "
-              "to execute.  If this flag is empty, or if this flag is the "
-              "string \"all\", all benchmarks linked into the binary are "
-              "run.");
+              "to execute.  If this flag is empty, no benchmarks are run.  "
+              "If this flag is the string \"all\", all benchmarks linked "
+              "into the process are run.");
 
 DEFINE_double(benchmark_min_time, 0.5,
               "Minimum number of seconds we should run benchmark before "
@@ -233,7 +233,7 @@ void RunBenchmarks(const std::vector<BenchmarkInstance>& benchmarks,
   size_t stat_field_width = 0;
   for (const BenchmarkInstance& benchmark : benchmarks) {
     name_field_width =
-        std::max<size_t>(name_field_width, benchmark.name.str().size());
+        std::max<size_t>(name_field_width, benchmark.name.size());
     might_have_aggregates |= benchmark.repetitions > 1;
 
     for (const auto& Stat : *benchmark.statistics)
@@ -393,8 +393,7 @@ size_t RunSpecifiedBenchmarks(BenchmarkReporter* display_reporter,
   }
 
   if (FLAGS_benchmark_list_tests) {
-    for (auto const& benchmark : benchmarks)
-      Out << benchmark.name.str() << "\n";
+    for (auto const& benchmark : benchmarks) Out << benchmark.name << "\n";
   } else {
     internal::RunBenchmarks(benchmarks, display_reporter, file_reporter);
   }

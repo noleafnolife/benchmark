@@ -246,11 +246,11 @@ BENCHMARK(BM_test)->Unit(benchmark::kMillisecond);
 #endif
 
 #if defined(__GNUC__) || __has_builtin(__builtin_unreachable)
-#define BENCHMARK_UNREACHABLE() __builtin_unreachable()
+  #define BENCHMARK_UNREACHABLE() __builtin_unreachable()
 #elif defined(_MSC_VER)
-#define BENCHMARK_UNREACHABLE() __assume(false)
+  #define BENCHMARK_UNREACHABLE() __assume(false)
 #else
-#define BENCHMARK_UNREACHABLE() ((void)0)
+  #define BENCHMARK_UNREACHABLE() ((void)0)
 #endif
 
 namespace benchmark {
@@ -344,6 +344,7 @@ inline BENCHMARK_ALWAYS_INLINE void DoNotOptimize(Tp const& value) {
   internal::UseCharPointer(&reinterpret_cast<char const volatile&>(value));
 }
 // FIXME Add ClobberMemory() for non-gnu and non-msvc compilers
+inline BENCHMARK_ALWAYS_INLINE void ClobberMemory() { /* FIXME: this doesn't do anything */ }
 #endif
 
 // This class is used for user-defined counters.
@@ -421,7 +422,6 @@ typedef double(BigOFunc)(int64_t);
 // statistics over all the measurements of some type
 typedef double(StatisticsFunc)(const std::vector<double>&);
 
-namespace internal {
 struct Statistics {
   std::string name_;
   StatisticsFunc* compute_;
@@ -430,6 +430,7 @@ struct Statistics {
       : name_(name), compute_(compute) {}
 };
 
+namespace internal {
 struct BenchmarkInstance;
 class ThreadTimer;
 class ThreadManager;
@@ -874,18 +875,11 @@ class Benchmark {
   // Same as ReportAggregatesOnly(), but applies to display reporter only.
   Benchmark* DisplayAggregatesOnly(bool value = true);
 
-  // By default, the CPU time is measured only for the main thread, which may
-  // be unrepresentative if the benchmark uses threads internally. If called,
-  // the total CPU time spent by all the threads will be measured instead.
-  // By default, the only the main thread CPU time will be measured.
-  Benchmark* MeasureProcessCPUTime();
-
-  // If a particular benchmark should use the Wall clock instead of the CPU time
-  // (be it either the CPU time of the main thread only (default), or the
-  // total CPU usage of the benchmark), call this method. If called, the elapsed
-  // (wall) time will be used to control how many iterations are run, and in the
-  // printing of items/second or MB/seconds values.
-  // If not called, the CPU time used by the benchmark will be used.
+  // If a particular benchmark is I/O bound, runs multiple threads internally or
+  // if for some reason CPU timings are not representative, call this method. If
+  // called, the elapsed time will be used to control how many iterations are
+  // run, and in the printing of items/second or MB/seconds values.  If not
+  // called, the cpu time used by the benchmark will be used.
   Benchmark* UseRealTime();
 
   // If a benchmark must measure time manually (e.g. if GPU execution time is
@@ -959,7 +953,6 @@ class Benchmark {
   double min_time_;
   size_t iterations_;
   int repetitions_;
-  bool measure_process_cpu_time_;
   bool use_real_time_;
   bool use_manual_time_;
   BigO complexity_;
@@ -1301,33 +1294,6 @@ struct CPUInfo {
   BENCHMARK_DISALLOW_COPY_AND_ASSIGN(CPUInfo);
 };
 
-// Adding Struct for System Information
-struct SystemInfo {
-  std::string name;
-  static const SystemInfo& Get();
-
- private:
-  SystemInfo();
-  BENCHMARK_DISALLOW_COPY_AND_ASSIGN(SystemInfo);
-};
-
-// BenchmarkName contains the components of the Benchmark's name
-// which allows individual fields to be modified or cleared before
-// building the final name using 'str()'.
-struct BenchmarkName {
-  std::string function_name;
-  std::string args;
-  std::string min_time;
-  std::string iterations;
-  std::string repetitions;
-  std::string time_type;
-  std::string threads;
-
-  // Return the full name of the benchmark with each non-empty
-  // field separated by a '/'
-  std::string str() const;
-};
-
 // Interface for custom benchmark result printers.
 // By default, benchmark reports are printed to stdout. However an application
 // can control the destination of the reports by calling
@@ -1337,7 +1303,6 @@ class BenchmarkReporter {
  public:
   struct Context {
     CPUInfo const& cpu_info;
-    SystemInfo const& sys_info;
     // The number of chars in the longest benchmark name.
     size_t name_field_width;
     static const char* executable_name;
@@ -1345,14 +1310,12 @@ class BenchmarkReporter {
   };
 
   struct Run {
-    static const int64_t no_repetition_index = -1;
     enum RunType { RT_Iteration, RT_Aggregate };
 
     Run()
         : run_type(RT_Iteration),
           error_occurred(false),
           iterations(1),
-          threads(1),
           time_unit(kNanosecond),
           real_accumulated_time(0),
           cpu_accumulated_time(0),
@@ -1368,17 +1331,14 @@ class BenchmarkReporter {
           max_bytes_used(0) {}
 
     std::string benchmark_name() const;
-    BenchmarkName run_name;
-    RunType run_type;
+    std::string run_name;
+    RunType run_type;          // is this a measurement, or an aggregate?
     std::string aggregate_name;
     std::string report_label;  // Empty if not set by benchmark.
     bool error_occurred;
     std::string error_message;
 
     int64_t iterations;
-    int64_t threads;
-    int64_t repetition_index;
-    int64_t repetitions;
     TimeUnit time_unit;
     double real_accumulated_time;
     double cpu_accumulated_time;
@@ -1404,7 +1364,7 @@ class BenchmarkReporter {
     int64_t complexity_n;
 
     // what statistics to compute from the measurements
-    const std::vector<internal::Statistics>* statistics;
+    const std::vector<Statistics>* statistics;
 
     // Inform print function whether the current run is a complexity report
     bool report_big_o;
@@ -1516,9 +1476,8 @@ class JSONReporter : public BenchmarkReporter {
   bool first_report_;
 };
 
-class BENCHMARK_DEPRECATED_MSG(
-    "The CSV Reporter will be removed in a future release") CSVReporter
-    : public BenchmarkReporter {
+class BENCHMARK_DEPRECATED_MSG("The CSV Reporter will be removed in a future release")
+      CSVReporter : public BenchmarkReporter {
  public:
   CSVReporter() : printed_header_(false) {}
   virtual bool ReportContext(const Context& context);

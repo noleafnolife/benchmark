@@ -16,13 +16,12 @@ namespace internal {
 
 // Information kept per benchmark we may want to run
 struct BenchmarkInstance {
-  BenchmarkName name;
+  std::string name;
   Benchmark* benchmark;
   AggregationReportMode aggregation_report_mode;
   std::vector<int64_t> arg;
   TimeUnit time_unit;
   int range_multiplier;
-  bool measure_process_cpu_time;
   bool use_real_time;
   bool use_manual_time;
   BigO complexity;

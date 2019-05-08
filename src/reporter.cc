@@ -79,11 +79,10 @@ void BenchmarkReporter::PrintBasicContext(std::ostream *out,
 // No initializer because it's already initialized to NULL.
 const char *BenchmarkReporter::Context::executable_name;
 
-BenchmarkReporter::Context::Context()
-    : cpu_info(CPUInfo::Get()), sys_info(SystemInfo::Get()) {}
+BenchmarkReporter::Context::Context() : cpu_info(CPUInfo::Get()) {}
 
 std::string BenchmarkReporter::Run::benchmark_name() const {
-  std::string name = run_name.str();
+  std::string name = run_name;
   if (run_type == RT_Aggregate) {
     name += "_" + aggregate_name;
   }

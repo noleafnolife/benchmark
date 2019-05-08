@@ -64,8 +64,7 @@ static const size_t kMaxIterations = 1000000000;
 BenchmarkReporter::Run CreateRunReport(
     const benchmark::internal::BenchmarkInstance& b,
     const internal::ThreadManager::Result& results, size_t memory_iterations,
-    const MemoryManager::Result& memory_result, double seconds,
-    int64_t repetition_index) {
+    const MemoryManager::Result& memory_result, double seconds) {
   // Create report about this benchmark run.
   BenchmarkReporter::Run report;
 
@@ -76,9 +75,6 @@ BenchmarkReporter::Run CreateRunReport(
   // This is the total iterations across all threads.
   report.iterations = results.iterations;
   report.time_unit = b.time_unit;
-  report.threads = b.threads;
-  report.repetition_index = repetition_index;
-  report.repetitions = b.repetitions;
 
   if (!report.error_occurred) {
     if (b.use_manual_time) {
@@ -111,10 +107,7 @@ BenchmarkReporter::Run CreateRunReport(
 // Adds the stats collected for the thread into *total.
 void RunInThread(const BenchmarkInstance* b, size_t iters, int thread_id,
                  ThreadManager* manager) {
-  internal::ThreadTimer timer(
-      b->measure_process_cpu_time
-          ? internal::ThreadTimer::CreateProcessCpuTime()
-          : internal::ThreadTimer::Create());
+  internal::ThreadTimer timer;
   State st = b->Run(iters, thread_id, &timer, manager);
   CHECK(st.iterations() >= st.max_iterations)
       << "Benchmark returned before State::KeepRunning() returned false!";
@@ -157,7 +150,8 @@ class BenchmarkRunner {
     }
 
     for (int repetition_num = 0; repetition_num < repeats; repetition_num++) {
-      DoOneRepetition(repetition_num);
+      const bool is_the_first_repetition = repetition_num == 0;
+      DoOneRepetition(is_the_first_repetition);
     }
 
     // Calculate additional statistics
@@ -197,7 +191,7 @@ class BenchmarkRunner {
     double seconds;
   };
   IterationResults DoNIterations() {
-    VLOG(2) << "Running " << b.name.str() << " for " << iters << "\n";
+    VLOG(2) << "Running " << b.name << " for " << iters << "\n";
 
     std::unique_ptr<internal::ThreadManager> manager;
     manager.reset(new internal::ThreadManager(b.threads));
@@ -229,8 +223,6 @@ class BenchmarkRunner {
     // Adjust real/manual time stats since they were reported per thread.
     i.results.real_time_used /= b.threads;
     i.results.manual_time_used /= b.threads;
-    // If we were measuring whole-process CPU usage, adjust the CPU time too.
-    if (b.measure_process_cpu_time) i.results.cpu_time_used /= b.threads;
 
     VLOG(2) << "Ran in " << i.results.cpu_time_used << "/"
             << i.results.real_time_used << "\n";
@@ -284,8 +276,7 @@ class BenchmarkRunner {
            ((i.results.real_time_used >= 5 * min_time) && !b.use_manual_time);
   }
 
-  void DoOneRepetition(int64_t repetition_index) {
-    const bool is_the_first_repetition = repetition_index == 0;
+  void DoOneRepetition(bool is_the_first_repetition) {
     IterationResults i;
 
     // We *may* be gradually increasing the length (iteration count)
@@ -335,9 +326,8 @@ class BenchmarkRunner {
     }
 
     // Ok, now actualy report.
-    BenchmarkReporter::Run report =
-        CreateRunReport(b, i.results, memory_iterations, memory_result,
-                        i.seconds, repetition_index);
+    BenchmarkReporter::Run report = CreateRunReport(
+        b, i.results, memory_iterations, memory_result, i.seconds);
 
     if (!report.error_occurred && b.complexity != oNone)
       complexity_reports.push_back(report);
